@@ -5,6 +5,7 @@ class Roomba {
   boolean pingOK = false;
   long sensorValue[] = new long[4];
   long battCharge;
+  int driveAngle = 0;
 
   Roomba(String _name) {
     name = _name;
@@ -59,8 +60,16 @@ class Roomba {
     }
 
     fill(255, 255, 0);
+    textAlign(RIGHT);
+    text((int)battCharge, 605, 20);
     textAlign(LEFT);
-    text(battCharge + " mAh", 640, 20);
+    text("mAh", 610, 20);
+    
+    fill(0, 255, 255);
+    testAlign(LEFT);
+    if(driveAngle > 0)        text(">>", 580, 40);
+    else if(driveAngle < 0)   text("<<", 580, 40);
+    else                      text("--", 580, 40);
     
     popMatrix();
   }

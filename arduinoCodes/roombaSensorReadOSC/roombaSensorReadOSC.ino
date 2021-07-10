@@ -8,6 +8,12 @@ uint64_t battVoltage, battCharge;
 int ddPin = 4;
 ///uint64_t sensorLeft, sensorRight;
 
+//PID setup
+uint8_t sensorArray[2] = {0, 0};
+int driveAngle = 0;
+bool bRunningOn = false;
+
+
 // WiFi
 const char* ssid = "icq4ever.asus";
 const char* pwd = "hoon525!";
@@ -78,6 +84,7 @@ void setupOSC() {
   OscWiFi.subscribe(recv_port, "/" + deviceName + "/requestSensor", [](const OscMessage & m) {
     OscWiFi.send(host, send_port, "/" + deviceName + "/sensorValue", sensor[0], sensor[1], sensor[2], sensor[3]);
 //    OscWiFi.send(host, send_port, "/voltage", battVoltage);
+    OscWiFi.send(host, send_port, "/" + deviceName + "/turn", driveAngle);
     OscWiFi.send(host, send_port, "/" + deviceName + "/charge", battCharge);
   });
 
@@ -97,6 +104,11 @@ void setupOSC() {
     playSleepSong();
     delay(1000);
     setSleepMode();
+  });
+
+  OscWiFi.subscribe(recv_port, "/" + deviceName + "/setRunning", [](const OscMessage & m) {
+    if(m.arg<int>(0) == 1)  bRunningOn = true;
+    else                    bRunningOn = false;
   });
 }
 
@@ -140,8 +152,27 @@ void loop() {
   if (millis() - songTimer > 50) {
     //    playSong();
     readCliffs();
-
     readBatteryCharge();
+
+
+    if(sensor[0] > 1200)  sensorArray[0] = 1;
+    else                  sensorArray[0] = 0;
+
+    if(sensor[3] > 1200)  sensorArray[1] = 1;
+    else                  sensorArray[1] = 0;
+
+    if      (sensorArray[0] == 0 && sensorArray[1] == 0)  driveAngle = 0;
+    else if (sensorArray[0] == 1 && sensorArray[1] == 0)  driveAngle = 1;
+    else if (sensorArray[0] == 0 && sensorArray[1] == 1)  driveAngle = -1;
+
+    if(bRunningOn)  {
+      if(driveAngle > 0)        roomba.drive(200, 10);
+      else if (driveAngle < 0)  roomba.drive(200, -10);
+      else                      roomba.drive(200, 0);
+    } else {
+      roomba.drive(0, 0);
+    }
+
     songTimer = millis();
   }
 }

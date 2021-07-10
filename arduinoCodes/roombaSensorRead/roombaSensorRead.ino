@@ -38,7 +38,7 @@ void loop() {
 
   if(millis() - songTimer > 50){
 //    playSong();
-    readCliffs();
+    readCliff();
 //    readBumper();
     songTimer = millis();
   }

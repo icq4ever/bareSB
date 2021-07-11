@@ -4,8 +4,10 @@ class Roomba {
   double pingCheckTimer;
   boolean pingOK = false;
   long sensorValue[] = new long[4];
-  long battCharge;
+  long battCharge, battCapacity;
   int driveAngle = 0;
+  boolean commOK = false;
+  int recivedOptCode[] = new int[3];
 
   Roomba(String _name) {
     name = _name;
@@ -23,8 +25,8 @@ class Roomba {
     }
 
     // ping check
-    if (millis() - pingCheckTimer >5000) pingOK = false;
-    else                                 pingOK = true;
+    if (millis() - pingCheckTimer > 5000) pingOK = false;
+    else                                  pingOK = true;
 
     pushMatrix();
     translate(_x, _y);
@@ -34,6 +36,7 @@ class Roomba {
     textAlign(RIGHT);
     for (int i=0; i<4; i++) {
       stroke(255);
+      strokeWeight(1);
       noFill();
       rect(140, i*20+10, 420, 10); 
       fill(255);
@@ -42,16 +45,23 @@ class Roomba {
       noStroke();
       rect(140, i*20+10, map(sensorValue[i], 0, 3000, 0, 420), 10);
     }
-
-    if (pingOK)    fill(0, 255, 0);
+    
+    noStroke();
+    if (commOK)   fill(0, 255, 0);
     else          fill(255, 0, 0);
-
+    ellipse(45, 45, 70, 70);
+    
+    noFill();
+    strokeWeight(3);
+    if (pingOK)   stroke(0, 255, 0);
+    else          stroke(255, 0, 0);
     ellipse(45, 45, 70, 70);
 
     // esp32 status
     textAlign(LEFT, CENTER);
     fill(255);
-    if (pingOK) {
+
+    if (commOK) {
       fill(0);
       text(this.name + "\nCOMM\nOK", 30, 45);
     } else {
@@ -62,14 +72,16 @@ class Roomba {
     fill(255, 255, 0);
     textAlign(RIGHT);
     text((int)battCharge, 605, 20);
+    text("/ " + (int)battCapacity, 605, 40);
     textAlign(LEFT);
     text("mAh", 610, 20);
+    text("mAh", 610, 40);
     
     fill(0, 255, 255);
-    testAlign(LEFT);
-    if(driveAngle > 0)        text(">>", 580, 40);
-    else if(driveAngle < 0)   text("<<", 580, 40);
-    else                      text("--", 580, 40);
+    textAlign(LEFT);
+    if(driveAngle > 0)        text(">>", 580, 80);
+    else if(driveAngle < 0)   text("<<", 580, 80);
+    else                      text("--", 580, 80);
     
     popMatrix();
   }

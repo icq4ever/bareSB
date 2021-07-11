@@ -4,8 +4,10 @@
 String deviceName = "RB1";
 bool bStatusLedOn = false;
 uint64_t sensor[4];
-uint64_t battVoltage, battCharge;
+uint64_t battVoltage, battCharge, battCapacity;
 int ddPin = 4;
+int roombaCommOK = 0;
+int irOptCode[1] = {0};
 ///uint64_t sensorLeft, sensorRight;
 
 //PID setup
@@ -39,6 +41,10 @@ uint8_t bootupSong[] = {62, 12, 66, 12, 69, 12, 74, 36};
 uint8_t sleepSong[]  = {74, 12, 69, 12, 66, 12, 62, 36};
 uint8_t sensorCliffs[] = {28, 29, 30, 31};
 
+int dockAvailable = 0;
+uint8_t sensorIRCodes[] = {17};
+uint64_t dockCheckingTimer;
+
 int i;
 float f;
 String s;
@@ -60,7 +66,7 @@ void setupOSC() {
   WiFi.mode(WIFI_STA);
 #endif
   // WiFi.begin();
-  WiFi.setHostname("ESP-host");
+//  WiFi.setHo/stname("ESP-host");
   Serial.println(WiFi.dnsIP());
   // WiFi.begin();
   // while(WiFi.status() != WL_CONNECT_FAILED) { delay(100);}  // 접속실패가 되면
@@ -68,24 +74,22 @@ void setupOSC() {
   WiFi.config(ip, gateway, subnet);
   while (WiFi.status() != WL_CONNECTED) {
     Serial.print(".");
-    delay(500);
+    delay(200);
   }
   Serial.print("WiFi connected, IP = "); Serial.println(WiFi.localIP());
 
   // subscribe osc message
   OscWiFi.subscribe(recv_port, "/" + deviceName + "/ping", [](const OscMessage & m) {
     bStatusLedOn = !bStatusLedOn;
-    int i = millis();
-//    float f = (float)micros() / 1000.f;
-//    String s = "ping";
-    OscWiFi.send(host, send_port, "/" + deviceName + "/reply", i);
+    OscWiFi.send(host, send_port, "/" + deviceName + "/reply", roombaCommOK);
   });
 
   OscWiFi.subscribe(recv_port, "/" + deviceName + "/requestSensor", [](const OscMessage & m) {
     OscWiFi.send(host, send_port, "/" + deviceName + "/sensorValue", sensor[0], sensor[1], sensor[2], sensor[3]);
 //    OscWiFi.send(host, send_port, "/voltage", battVoltage);
     OscWiFi.send(host, send_port, "/" + deviceName + "/turn", driveAngle);
-    OscWiFi.send(host, send_port, "/" + deviceName + "/charge", battCharge);
+    OscWiFi.send(host, send_port, "/" + deviceName + "/charge", battCharge, battCapacity);
+    OscWiFi.send(host, send_port, "/" + deviceName + "/optCode", dockAvailable, irOptCode[0]);
   });
 
   OscWiFi.subscribe(recv_port, "/" + deviceName + "/wakeup", [](const OscMessage & m) {
@@ -109,6 +113,11 @@ void setupOSC() {
   OscWiFi.subscribe(recv_port, "/" + deviceName + "/setRunning", [](const OscMessage & m) {
     if(m.arg<int>(0) == 1)  bRunningOn = true;
     else                    bRunningOn = false;
+  });
+
+  OscWiFi.subscribe(recv_port, "/" + deviceName + "/docking", [](const OscMessage & m) {
+    roomba.coverAndDock();
+    delay(50);
   });
 }
 
@@ -153,6 +162,8 @@ void loop() {
     //    playSong();
     readCliffs();
     readBatteryCharge();
+    readBatteryCapacity();
+    checkDockAvailable();
 
 
     if(sensor[0] > 1200)  sensorArray[0] = 1;
@@ -202,6 +213,33 @@ void readBatteryCharge(){
   }
 }
 
+void checkDockAvailable(){
+  uint8_t buf[1];
+
+  bool ret = roomba.getSensorsList(sensorIRCodes, 1, buf, 1);
+  if(ret) {
+    irOptCode[0] = (int)buf[0];
+    if(irOptCode[0] == 161 || irOptCode[0] == 164 || irOptCode[0] == 168) {
+       dockCheckingTimer = millis();
+    }
+
+    if(millis() - dockCheckingTimer < 700)  dockAvailable = 1;
+    else                                    dockAvailable = 0;
+    
+    Serial.print((int)buf[0]);
+    Serial.println();
+  } else {
+    Serial.println("cannot read sensor dock value");
+  }
+}
+
+void readBatteryCapacity(){
+  uint8_t buf[2];
+
+  bool ret = roomba.getSensors(26, buf, 2);
+  if(ret) battCapacity = 256*buf[0] + buf[1];
+}
+
 void readCliffs() {
   uint8_t buf[8];
   bool ret = roomba.getSensorsList(sensorCliffs, 4, buf, 8);
@@ -210,8 +248,10 @@ void readCliffs() {
     sensor[1] = 256 * buf[2] + buf[3];
     sensor[2] = 256 * buf[4] + buf[5];
     sensor[3] = 256 * buf[6] + buf[7];
+    roombaCommOK = 1;
   } else {
     Serial.println("sensor poll failed");
+    roombaCommOK = 0;
   }
 }
 

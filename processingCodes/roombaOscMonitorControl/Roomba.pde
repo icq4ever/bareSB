@@ -1,5 +1,6 @@
 class Roomba {
   String name;
+  boolean reportOn;
   double pingTimer, requestTimer;
   double pingCheckTimer;
   boolean pingOK = false;
@@ -8,6 +9,11 @@ class Roomba {
   int driveAngle = 0;
   boolean commOK = false;
   int recivedOptCode[] = new int[3];
+  String currentModeString = "off";
+  String currentChargingState = "unknown";
+  
+  int roombaStatus = 0;  
+  String reportedMessage = "";
 
   Roomba(String _name) {
     name = _name;
@@ -15,13 +21,35 @@ class Roomba {
   }
 
   void draw(float _x, float _y) {
-    if (millis() - pingTimer > 200) {
+    switch(roombaStatus){
+      case 0 : 
+      case 63:
+      rb1.currentModeString = "off";
+      break;
+    case 1 :
+      rb1.currentModeString = "passive";
+      break;
+    case 2:
+      rb1.currentModeString = "safe";
+      break;
+    case 3 :
+      rb1.currentModeString = "full";
+      break;
+    default:
+      rb1.currentModeString = "unknown";
+      break;
+    }
+
+    if (millis() - pingTimer > 500) {
       sendPing();
       pingTimer = millis();
     }
-    if (millis() - requestTimer > 100) {
-      sendRequestMessage();
-      requestTimer = millis();
+    
+    if(reportOn) {
+      if (millis() - requestTimer > 200) {
+        sendRequestMessage();
+        requestTimer = millis();
+      }
     }
 
     // ping check
@@ -43,7 +71,7 @@ class Roomba {
       text(int(sensorValue[i]), 128, i*20+20);
       fill(255, 255, 0);
       noStroke();
-      rect(140, i*20+10, map(sensorValue[i], 0, 3000, 0, 420), 10);
+      rect(140, i*20+10, map(sensorValue[i], 0, 4095, 0, 420), 10);
     }
     
     noStroke();
@@ -76,6 +104,11 @@ class Roomba {
     textAlign(LEFT);
     text("mAh", 610, 20);
     text("mAh", 610, 40);
+    
+    //reported
+    fill(0, 255, 0);
+    textAlign(LEFT);
+    text(currentModeString, 580, 60);
     
     fill(0, 255, 255);
     textAlign(LEFT);

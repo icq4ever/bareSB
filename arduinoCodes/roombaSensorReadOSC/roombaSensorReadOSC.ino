@@ -86,11 +86,11 @@ void setupOSC() {
   });
 
   OscWiFi.subscribe(recv_port, "/" + deviceName + "/requestSensor", [](const OscMessage & m) {
-    if(currentMode != 0 || currentMode != 63){
-    OscWiFi.send(host, send_port, "/" + deviceName + "/sensorValue", sensor[0], sensor[1], sensor[2], sensor[3]);
-    OscWiFi.send(host, send_port, "/" + deviceName + "/turn", driveAngle);
-    OscWiFi.send(host, send_port, "/" + deviceName + "/charge", battCharge, battCapacity);
-    OscWiFi.send(host, send_port, "/" + deviceName + "/optCode", dockAvailable, irOptCode[0]);
+    if (currentMode != 0 || currentMode != 63) {
+      OscWiFi.send(host, send_port, "/" + deviceName + "/sensorValue", sensor[0], sensor[1], sensor[2], sensor[3]);
+      OscWiFi.send(host, send_port, "/" + deviceName + "/turn", driveAngle);
+      OscWiFi.send(host, send_port, "/" + deviceName + "/charge", battCharge, battCapacity);
+      OscWiFi.send(host, send_port, "/" + deviceName + "/optCode", dockAvailable, irOptCode[0]);
     }
   });
 
@@ -162,10 +162,10 @@ void loop() {
       readBatteryCapacity();
       checkDockAvailable();
 
-      if (sensor[0] > 1200)  sensorArray[0] = 1;
+      if (sensor[0] > 500)  sensorArray[0] = 1;
       else                  sensorArray[0] = 0;
 
-      if (sensor[3] > 1200)  sensorArray[1] = 1;
+      if (sensor[3] > 500)  sensorArray[1] = 1;
       else                  sensorArray[1] = 0;
 
       if      (sensorArray[0] == 0 && sensorArray[1] == 0)  driveAngle = 0;
@@ -173,7 +173,7 @@ void loop() {
       else if (sensorArray[0] == 0 && sensorArray[1] == 1)  driveAngle = -1;
 
       if (bRunningOn)  {
-        if (driveAngle > 0)        roomba.drive(200, 10);
+        if (driveAngle > 0)       roomba.drive(200, 10);
         else if (driveAngle < 0)  roomba.drive(200, -10);
         else                      roomba.drive(200, 0);
       } else {
@@ -194,7 +194,7 @@ void checkOIMode() {
 void readBatteryVoltage() {
   uint8_t buf[2];
 
-  bool ret = roomba.getSensors(22, buf, 2);
+  bool ret = roomba.getSensors(Roomba::SensorVoltage, buf, 2);
   if (ret) {
     battVoltage = 256 * buf[1] + buf[0];
   }
@@ -203,17 +203,21 @@ void readBatteryVoltage() {
 void readBatteryCharge() {
   uint8_t buf[2];
 
-  bool ret = roomba.getSensors(25, buf, 2);
+  bool ret = roomba.getSensors(Roomba::SensorBatteryCharge, buf, 2);
   if (ret) {
-    battCharge = 256 * buf[1] + buf[0];
+//    battCharge = 256 * buf[1] + buf[0];
+    battCharge = uint16_t(buf[0]) << 8 | uint16_t(buf[1]);
   }
 }
 
 void readBatteryCapacity() {
   uint8_t buf[2];
 
-  bool ret = roomba.getSensors(26, buf, 2);
-  if (ret) battCapacity = 256 * buf[1] + buf[0];
+  bool ret = roomba.getSensors(Roomba::SensorBatteryCapacity, buf, 2);
+  if (ret) {
+//    battCapacity = 256 * buf[1] + buf[0];
+    battCapacity = uint16_t(buf[0]) << 8 | uint16_t(buf[1]);
+  }
 }
 
 void readChargingState() {
@@ -327,6 +331,10 @@ void dock() {
   Serial.println("dock Roomba Sent!");
   bDone = true;
 }
+
+//void PID_control(){
+//  int error = 
+//}
 
 void playBootupSong() {
   roomba.song(0, bootupSong, sizeof(bootupSong));

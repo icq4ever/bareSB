@@ -1,7 +1,7 @@
 #include <Roomba.h>
 #include <ArduinoOSC.h>
 
-String deviceName = "RB1";
+String deviceName = "RB2";
 bool bStatusLedOn = false;
 uint64_t sensor[4];
 
@@ -15,13 +15,14 @@ int irOptCode[1] = {0};
 uint8_t sensorArray[2] = {0, 0};
 int driveAngle = 0;
 bool bRunningOn = false;
+bool bLastRunningOn = false;
 
 // WiFi
 const char* ssid = "icq4ever.asus";
 const char* pwd = "hoon525!";
 //const char* ssid = "icq4ever.iptime_2,4G";
 //const char* pwd = "2684512345";
-const IPAddress ip(192, 168, 0, 10);
+const IPAddress ip(192, 168, 0, 11);
 const IPAddress gateway(192, 168, 0, 1);
 const IPAddress subnet(255, 255, 255, 0);
 
@@ -63,124 +64,68 @@ uint64_t tt;
 uint64_t cmdTimer;
 uint64_t timerWdtChecked;
 
-void setupOSC() {
+// PID Controller
+float Kp = 25;
+float Ki = 0.15;
+float Kd = 1000;
+float errorValue = 0;
+float P = 0;
+float I = 0;
+float D = 0;
+float PIDValue = 0;
+float pErrorValue = 0;
+int turnValue = 0;
 
-#ifdef ESP_PLATFORM
-  WiFi.disconnect(true, true); // disable wifi, erase ap info
-  delay(2000);
-  WiFi.mode(WIFI_STA);
-#endif
+void drunkenTurn() {
+  if (sensor[0] > 500)  sensorArray[0] = 1;
+  else                  sensorArray[0] = 0;
 
-  WiFi.begin(ssid, pwd);
-  WiFi.config(ip, gateway, subnet);
-  while (WiFi.status() != WL_CONNECTED) {
-    Serial.print(".");
-    delay(200);
+  if (sensor[3] > 500)  sensorArray[1] = 1;
+  else                  sensorArray[1] = 0;
+
+  if      (sensorArray[0] == 0 && sensorArray[1] == 0)  driveAngle = 0;
+  else if (sensorArray[0] == 1 && sensorArray[1] == 0)  driveAngle = 1;
+  else if (sensorArray[0] == 0 && sensorArray[1] == 1)  driveAngle = -1;
+
+  if (bRunningOn)  {
+    if (driveAngle > 0)       roomba.drive(200, 10);
+    else if (driveAngle < 0)  roomba.drive(200, -10);
+    else                      roomba.drive(200, 0);
+  } else {
+    roomba.drive(0, 0);
   }
-  Serial.print("WiFi connected, IP = "); Serial.println(WiFi.localIP());
-
-  // subscribe osc message
-  OscWiFi.subscribe(recv_port, "/" + deviceName + "/ping", [](const OscMessage & m) {
-    bStatusLedOn = !bStatusLedOn;
-    OscWiFi.send(host, send_port, "/" + deviceName + "/reply", roombaCommOK);
-  });
-
-  OscWiFi.subscribe(recv_port, "/" + deviceName + "/requestSensor", [](const OscMessage & m) {
-    if (currentMode != 0 || currentMode != 63) {
-      OscWiFi.send(host, send_port, "/" + deviceName + "/sensorValue", sensor[0], sensor[1], sensor[2], sensor[3]);
-      OscWiFi.send(host, send_port, "/" + deviceName + "/turn", driveAngle);
-      OscWiFi.send(host, send_port, "/" + deviceName + "/charge", battCharge, battCapacity);
-      OscWiFi.send(host, send_port, "/" + deviceName + "/optCode", dockAvailable, irOptCode[0]);
-    }
-  });
-
-  OscWiFi.subscribe(recv_port, "/" + deviceName + "/wakeup", [](const OscMessage & m) {
-    wakeUp();
-  });
-
-  OscWiFi.subscribe(recv_port, "/" + deviceName + "/safeMode", [](const OscMessage & m) {
-    setSafeMode();
-  });
-
-  OscWiFi.subscribe(recv_port, "/" + deviceName + "/passiveMode", [](const OscMessage & m) {
-    setPassiveMode();
-  });
-
-  OscWiFi.subscribe(recv_port, "/" + deviceName + "/sleepMode", [](const OscMessage & m) {
-    playSleepSong();
-    delay(1000);
-    setSleepMode();
-  });
-
-  OscWiFi.subscribe(recv_port, "/" + deviceName + "/setRunning", [](const OscMessage & m) {
-    if (m.arg<int>(0) == 1)  bRunningOn = true;
-    else                    bRunningOn = false;
-  });
-
-  OscWiFi.subscribe(recv_port, "/" + deviceName + "/docking", [](const OscMessage & m) {
-    roomba.coverAndDock();
-    delay(50);
-  });
 }
 
-void initRoomba() {
-  roomba.start();
-  delay(50);
-  roomba.safeMode();
-  delay(50);
-
-  Serial.println("roomba inited");
-  playBootupSong();
-  delay(1000);
+void directTurn(){
+  if(sensor[0] > 500 || sensor[3] > 500){
+//    errorValue = map(sensor[0]-sensor[3], -500, 500, -10, 10);
+//    P = errorValue;
+//    I = I + errorValue;;
+//    D = errorValue - pErrorValue;
+//    PIDValue = (Kp * P) + (Ki * I) + (Kd * D);
+//    pErrorValue = errorValue;
+  
+//    turnValue = constrain(map(PIDValue, -1500, 1500, -80, 80), -80, 80);
+    turnValue = constrain(map(sensor[0] - sensor[3], -800, 800, -80, 80), -80, 80);
+    roomba.driveDirect(150 - turnValue, 150 + turnValue);
+  } else {
+    roomba.driveDirect(150, 150);
+  }
 }
 
-void setup() {
-  Serial.begin(115200);
-  delay(1000);
-  pinMode(ddPin, OUTPUT);
+void pidTurn(){
+  if(sensor[0] > 500 || sensor[3] > 500){
+  errorValue = map(sensor[0]-sensor[3], -500, 500, -10, 10);
+  P = errorValue;
+  I = I + errorValue;;
+  D = errorValue - pErrorValue;
+  PIDValue = (Kp * P) + (Ki * I) + (Kd * D);
+  pErrorValue = errorValue;
 
-  tt = millis();
-
-  setupOSC();
-
-  Serial.println("booted");
-  initRoomba();
-  //  roomba.stream(streamPackitIDs, 9);
-  roomba.streamCommand(Roomba::StreamCommandPause);
-
-  reportTimer = millis();
-}
-
-void loop() {
-  OscWiFi.update();
-
-  if (millis() - reportTimer > 100) {
-    checkOIMode();
-    if (currentMode != 0 || currentMode != 63) {
-      readCliffs();
-      readBatteryCharge();
-      readBatteryCapacity();
-      checkDockAvailable();
-
-      if (sensor[0] > 500)  sensorArray[0] = 1;
-      else                  sensorArray[0] = 0;
-
-      if (sensor[3] > 500)  sensorArray[1] = 1;
-      else                  sensorArray[1] = 0;
-
-      if      (sensorArray[0] == 0 && sensorArray[1] == 0)  driveAngle = 0;
-      else if (sensorArray[0] == 1 && sensorArray[1] == 0)  driveAngle = 1;
-      else if (sensorArray[0] == 0 && sensorArray[1] == 1)  driveAngle = -1;
-
-      if (bRunningOn)  {
-        if (driveAngle > 0)       roomba.drive(200, 10);
-        else if (driveAngle < 0)  roomba.drive(200, -10);
-        else                      roomba.drive(200, 0);
-      } else {
-        roomba.drive(0, 0);
-      }
-    }
-    reportTimer = millis();
+  turnValue = map(PIDValue, -1500, 1500, -5, 5);
+  roomba.drive(200, turnValue);
+  } else {
+    roomba.drive(200, 0);
   }
 }
 
@@ -188,6 +133,9 @@ void checkOIMode() {
   uint8_t buf[1];
   bool ret = roomba.getSensors(35, buf, 1);
   currentMode = (unsigned int)buf[0];
+  if(!ret)  Serial.println("check OIMode failed!");
+  else      Serial.print("OIMode : ");
+  Serial.println(currentMode);
   OscWiFi.send(host, send_port, "/" + deviceName + "/currentMode", (unsigned int)buf[0]);
 }
 
@@ -205,7 +153,7 @@ void readBatteryCharge() {
 
   bool ret = roomba.getSensors(Roomba::SensorBatteryCharge, buf, 2);
   if (ret) {
-//    battCharge = 256 * buf[1] + buf[0];
+    //    battCharge = 256 * buf[1] + buf[0];
     battCharge = uint16_t(buf[0]) << 8 | uint16_t(buf[1]);
   }
 }
@@ -215,7 +163,7 @@ void readBatteryCapacity() {
 
   bool ret = roomba.getSensors(Roomba::SensorBatteryCapacity, buf, 2);
   if (ret) {
-//    battCapacity = 256 * buf[1] + buf[0];
+    //    battCapacity = 256 * buf[1] + buf[0];
     battCapacity = uint16_t(buf[0]) << 8 | uint16_t(buf[1]);
   }
 }
@@ -332,9 +280,7 @@ void dock() {
   bDone = true;
 }
 
-//void PID_control(){
-//  int error = 
-//}
+
 
 void playBootupSong() {
   roomba.song(0, bootupSong, sizeof(bootupSong));
@@ -364,4 +310,120 @@ void error(const char *m) {
   Serial.print("Error: ");
   Serial.println(m);
   errors++;
+}
+
+void setupOSC() {
+
+#ifdef ESP_PLATFORM
+  WiFi.disconnect(true, true); // disable wifi, erase ap info
+  delay(2000);
+  WiFi.mode(WIFI_STA);
+#endif
+
+  WiFi.begin(ssid, pwd);
+  WiFi.config(ip, gateway, subnet);
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.print(".");
+    delay(200);
+  }
+  Serial.print("WiFi connected, IP = "); Serial.println(WiFi.localIP());
+
+  // subscribe osc message
+  OscWiFi.subscribe(recv_port, "/" + deviceName + "/ping", [](const OscMessage & m) {
+    bStatusLedOn = !bStatusLedOn;
+    OscWiFi.send(host, send_port, "/" + deviceName + "/reply", roombaCommOK);
+  });
+
+  OscWiFi.subscribe(recv_port, "/" + deviceName + "/requestSensor", [](const OscMessage & m) {
+    if (currentMode != 0 || currentMode != 63) {
+      OscWiFi.send(host, send_port, "/" + deviceName + "/sensorValue", sensor[0], sensor[1], sensor[2], sensor[3]);
+      OscWiFi.send(host, send_port, "/" + deviceName + "/turn", driveAngle);
+      OscWiFi.send(host, send_port, "/" + deviceName + "/charge", battCharge, battCapacity);
+      OscWiFi.send(host, send_port, "/" + deviceName + "/optCode", dockAvailable, irOptCode[0]);
+      OscWiFi.send(host, send_port, "/" + deviceName + "/pidValue", PIDValue, turnValue);
+    }
+  });
+
+  OscWiFi.subscribe(recv_port, "/" + deviceName + "/wakeup", [](const OscMessage & m) {
+    wakeUp();
+  });
+
+  OscWiFi.subscribe(recv_port, "/" + deviceName + "/safeMode", [](const OscMessage & m) {
+    setSafeMode();
+  });
+
+  OscWiFi.subscribe(recv_port, "/" + deviceName + "/passiveMode", [](const OscMessage & m) {
+    setPassiveMode();
+  });
+
+  OscWiFi.subscribe(recv_port, "/" + deviceName + "/sleepMode", [](const OscMessage & m) {
+    playSleepSong();
+    delay(1000);
+    setSleepMode();
+  });
+
+  OscWiFi.subscribe(recv_port, "/" + deviceName + "/setRunning", [](const OscMessage & m) {
+    if (m.arg<int>(0) == 1)  bRunningOn = true;
+    else                    bRunningOn = false;
+  });
+
+  OscWiFi.subscribe(recv_port, "/" + deviceName + "/docking", [](const OscMessage & m) {
+    roomba.coverAndDock();
+    delay(50);
+  });
+}
+
+void initRoomba() {
+  roomba.start();
+  delay(50);
+  roomba.safeMode();
+  delay(50);
+
+  Serial.println("roomba inited");
+  playBootupSong();
+  delay(1000);
+}
+
+void setup() {
+  Serial.begin(115200);
+  delay(1000);
+  pinMode(ddPin, OUTPUT);
+
+  tt = millis();
+
+  setupOSC();
+
+  Serial.println("booted");
+  initRoomba();
+  //  roomba.stream(streamPackitIDs, 9);
+  roomba.streamCommand(Roomba::StreamCommandPause);
+
+  reportTimer = millis();
+}
+
+void loop() {
+  OscWiFi.update();
+
+  if (millis() - reportTimer > 100) {
+    checkOIMode();
+    if (currentMode != 0 || currentMode != 63) {
+      readCliffs();
+      readBatteryCharge();
+      readBatteryCapacity();
+      checkDockAvailable();
+
+      if (bRunningOn)  {
+        directTurn();
+//        pidTurn();
+//      drunkenTurn();
+      }
+    }
+    reportTimer = millis();
+  }
+  
+
+  if(bLastRunningOn != bRunningOn && bRunningOn == false){
+    roomba.driveDirect(0, 0);
+  }
+  bLastRunningOn = bRunningOn;
 }

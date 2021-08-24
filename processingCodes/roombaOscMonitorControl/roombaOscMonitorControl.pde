@@ -14,15 +14,13 @@ void setupUI() {
   cp5 = new ControlP5(this);
   cp5.addButton("RB1_WAKEUP").setPosition(10, 10).setSize(80, 20);
   cp5.addButton("RB1_SLEEP").setPosition(10, 35).setSize(80, 20);
-  //cp5.addButton("RB1_PASSIVE").setPosition(10, 35).setSize(80, 20);
-  //cp5.addButton("RB1_SLEEP").setPosition(10, 60).setSize(80, 20);
   cp5.addToggle("RB1_REPORT").setPosition(10, 60).setSize(80, 20);
   cp5.addButton("RB1_DOCK").setPosition(95, 10).setSize(50, 20);
   cp5.addToggle("RB1_RUN").setPosition(95, 35).setSize(50, 45);
-
+  
   cp5.addButton("RB2_WAKEUP").setPosition(10, 110).setSize(80, 20);
-  //cp5.addButton("RB2_PASSIVE").setPosition(10,135).setSize(80, 20);
-  //cp5.addButton("RB2_SLEEP").setPosition(10, 160).setSize(80, 20);
+  cp5.addButton("RB2_SLEEP").setPosition(10, 135).setSize(80, 20);
+  cp5.addToggle("RB2_REPORT").setPosition(10, 160).setSize(80, 20);
   cp5.addButton("RB2_DOCK").setPosition(95, 110).setSize(50, 20);
   cp5.addToggle("RB2_RUN").setPosition(95, 135).setSize(50, 45);
 }
@@ -52,20 +50,18 @@ void draw() {
 }
 
 void oscEvent(OscMessage m) {
+  // RB1
   if (m.checkAddrPattern("/RB1/report")) {
     rb1.reportedMessage = m.get(0).stringValue();
-    if (m.get(0).stringValue() == "wakeup")  rb1.roombaStatus = 1;
-    else if (m.get(0).stringValue() == "safemode")  rb1.roombaStatus = 1;
+    if (m.get(0).stringValue() == "wakeup")            rb1.roombaStatus = 1;
+    else if (m.get(0).stringValue() == "safemode")     rb1.roombaStatus = 1;
     else if (m.get(0).stringValue() == "passivemode")  rb1.roombaStatus = 0;
-    else                                             rb1.roombaStatus = -1;
+    else                                               rb1.roombaStatus = -1;
   }
-
   if (m.checkAddrPattern("/RB1/currentMode")) {
-    println(millis() + "roomba mode : " + m.get(0).intValue());
+    //println("roomba mode : " + m.get(0).intValue());
     rb1.roombaStatus = m.get(0).intValue();
   }
-
-  // RB1
   if (m.checkAddrPattern("/RB1/reply")) {
     if (m.get(0).intValue() == 1)  rb1.commOK = true;
     else                          rb1.commOK = false;
@@ -86,12 +82,22 @@ void oscEvent(OscMessage m) {
   if (m.checkAddrPattern("/RB1/optCode")) {
     rb1.recivedOptCode[0] = m.get(0).intValue();
     rb1.recivedOptCode[1] = m.get(1).intValue();
-    //print("dockAvailable : " + rb1.recivedOptCode[0]);
-    //print("   / code : " + rb1.recivedOptCode[1]);
-    //println();
   }
 
   // RB2
+  if (m.checkAddrPattern("/RB2/report")) {
+    rb2.reportedMessage = m.get(0).stringValue();
+    if (m.get(0).stringValue() == "wakeup")            rb2.roombaStatus = 1;
+    else if (m.get(0).stringValue() == "safemode")     rb2.roombaStatus = 1;
+    else if (m.get(0).stringValue() == "passivemode")  rb2.roombaStatus = 0;
+    else                                               rb2.roombaStatus = -1;
+  }
+  
+  if (m.checkAddrPattern("/RB2/currentMode")) {
+    //println("roomba mode : " + m.get(0).intValue());
+    rb2.roombaStatus = m.get(0).intValue();
+  }
+  
   if (m.checkAddrPattern("/RB2/reply")) {
     if (m.get(0).intValue() == 1)  rb2.commOK = true;
     else                          rb2.commOK = false;
@@ -110,11 +116,8 @@ void oscEvent(OscMessage m) {
     rb2.battCapacity = m.get(1).longValue();
   }
   if (m.checkAddrPattern("/RB2/optCode")) {
-    rb1.recivedOptCode[0] = m.get(0).intValue();
-    rb1.recivedOptCode[1] = m.get(1).intValue();
-    print("dockAvailable : " + rb1.recivedOptCode[0]);
-    print("   / code : " + rb1.recivedOptCode[1]);
-    println();
+    rb2.recivedOptCode[0] = m.get(0).intValue();
+    rb2.recivedOptCode[1] = m.get(1).intValue();
   }
 }
 
@@ -177,6 +180,14 @@ public void controlEvent(ControlEvent e) {
     m.add(1);
     oscP5.send(m, roomba);
   }
+  if (ctrName == "RB2_REPORT") {
+    if (e.getController().getValue() == 1.0) {
+      rb2.reportOn = true;
+    } else {
+      rb2.reportOn = false;
+      for (int i=0; i<rb2.sensorValue.length; i++) rb2.sensorValue[i] = 0;
+    }
+  }
   if (ctrName == "RB2_DOCK") {
     OscMessage m = new OscMessage("/RB2/docking");
     if (e.getController().getValue() == 1.0)  m.add(1);
@@ -184,7 +195,7 @@ public void controlEvent(ControlEvent e) {
     oscP5.send(m, roomba);
   }
   if (ctrName == "RB2_RUN") {
-    OscMessage m = new OscMessage("/RB1/running");
+    OscMessage m = new OscMessage("/RB2/setRunning");
     if (e.getController().getValue() == 1.0)  m.add(1);
     else                                     m.add(0);
     oscP5.send(m, roomba);

@@ -24,19 +24,19 @@ class Roomba {
     switch(roombaStatus){
       case 0 : 
       case 63:
-      rb1.currentModeString = "off";
+      currentModeString = "off";
       break;
     case 1 :
-      rb1.currentModeString = "passive";
+      currentModeString = "passive";
       break;
     case 2:
-      rb1.currentModeString = "safe";
+      currentModeString = "safe";
       break;
     case 3 :
-      rb1.currentModeString = "full";
+      currentModeString = "full";
       break;
     default:
-      rb1.currentModeString = "unknown";
+      currentModeString = "unknown";
       break;
     }
 
